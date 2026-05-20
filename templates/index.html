@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>フジケンAI</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif;
+      background: #1a1a2e;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 680px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #16213e;
+    }
+
+    /* ヘッダー */
+    .header {
+      background: linear-gradient(135deg, #0f3460, #533483);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+
+    .avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #e94560, #533483);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: bold;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .header-info h1 {
+      color: #ffffff;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .header-info p {
+      color: #a0aec0;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #68d391;
+      font-size: 12px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #68d391;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* メッセージエリア */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-track { background: transparent; }
+    .messages::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+
+    /* ウェルカムメッセージ */
+    .welcome {
+      text-align: center;
+      padding: 24px 16px;
+      color: #718096;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .welcome strong {
+      display: block;
+      color: #a0aec0;
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    /* メッセージバブル */
+    .message {
+      display: flex;
+      gap: 10px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user {
+      flex-direction: row-reverse;
+    }
+
+    .msg-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #e94560, #533483);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: white;
+      flex-shrink: 0;
+      font-weight: bold;
+    }
+
+    .msg-avatar.user-av {
+      background: linear-gradient(135deg, #2d3748, #4a5568);
+    }
+
+    .bubble {
+      max-width: 75%;
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .message.bot .bubble {
+      background: #2d3748;
+      color: #e2e8f0;
+      border-bottom-left-radius: 4px;
+    }
+
+    .message.user .bubble {
+      background: linear-gradient(135deg, #0f3460, #533483);
+      color: #ffffff;
+      border-bottom-right-radius: 4px;
+    }
+
+    /* タイピングインジケーター */
+    .typing {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .typing-dots {
+      background: #2d3748;
+      padding: 14px 18px;
+      border-radius: 18px;
+      border-bottom-left-radius: 4px;
+      display: flex;
+      gap: 5px;
+    }
+
+    .typing-dots span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #718096;
+      animation: typing 1.2s infinite;
+    }
+
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typing {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    /* 入力エリア */
+    .input-area {
+      padding: 16px;
+      background: #1a2744;
+      border-top: 1px solid #2d3748;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    textarea {
+      flex: 1;
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 24px;
+      color: #e2e8f0;
+      padding: 12px 18px;
+      font-size: 14px;
+      resize: none;
+      outline: none;
+      max-height: 120px;
+      min-height: 48px;
+      font-family: inherit;
+      line-height: 1.5;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus {
+      border-color: #533483;
+    }
+
+    textarea::placeholder { color: #4a5568; }
+
+    .send-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #e94560, #533483);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+
+    .send-btn:hover { transform: scale(1.05); }
+    .send-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+    .send-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: white;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 10px;
+      color: #4a5568;
+      padding: 6px;
+      background: #1a2744;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ヘッダー -->
+  <div class="header">
+    <div class="avatar">藤</div>
+    <div class="header-info">
+      <h1>藤本 憲 AI</h1>
+      <p>フジケン / ラジオパーソナリティ</p>
+    </div>
+    <div class="status">
+      <div class="status-dot"></div>
+      オンライン
+    </div>
+  </div>
+
+  <!-- メッセージ -->
+  <div class="messages" id="messages">
+    <div class="welcome">
+      <strong>👋 フジケンAIへようこそ</strong>
+      藤本 憲についての質問はなんでも聞いてください。<br>
+      担当番組・趣味・考え方など、なんでも答えます。
+    </div>
+  </div>
+
+  <!-- 入力エリア -->
+  <div class="input-area">
+    <textarea
+      id="input"
+      placeholder="フジケンに聞いてみる..."
+      rows="1"
+    ></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+  <div class="footer-note">藤本 憲 の分身AI · Powered by Google Gemini</div>
+
+</div>
+
+<script>
+  const messagesEl = document.getElementById("messages");
+  const inputEl    = document.getElementById("input");
+  const sendBtn    = document.getElementById("sendBtn");
+  let history = [];
+  let isLoading = false;
+
+  // テキストエリアの自動リサイズ
+  inputEl.addEventListener("input", () => {
+    inputEl.style.height = "auto";
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
+  });
+
+  // Enterで送信（Shift+Enterで改行）
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  function addMessage(role, text) {
+    const isUser = role === "user";
+    const div = document.createElement("div");
+    div.className = `message ${isUser ? "user" : "bot"}`;
+
+    const avatarText = isUser ? "你" : "藤";
+    div.innerHTML = `
+      <div class="msg-avatar ${isUser ? "user-av" : ""}">${isUser ? "👤" : "藤"}</div>
+      <div class="bubble">${text.replace(/\n/g, "<br>")}</div>
+    `;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function showTyping() {
+    const div = document.createElement("div");
+    div.className = "typing";
+    div.id = "typing";
+    div.innerHTML = `
+      <div class="msg-avatar">藤</div>
+      <div class="typing-dots">
+        <span></span><span></span><span></span>
+      </div>
+    `;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function removeTyping() {
+    const t = document.getElementById("typing");
+    if (t) t.remove();
+  }
+
+  async function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text || isLoading) return;
+
+    isLoading = true;
+    sendBtn.disabled = true;
+    inputEl.value = "";
+    inputEl.style.height = "auto";
+
+    addMessage("user", text);
+    showTyping();
+
+    try {
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, history })
+      });
+      const data = await res.json();
+      removeTyping();
+
+      if (data.response) {
+        addMessage("bot", data.response);
+        history.push({ role: "user", content: text });
+        history.push({ role: "model", content: data.response });
+        // 直近20件のみ保持
+        if (history.length > 20) history = history.slice(-20);
+      } else {
+        addMessage("bot", "すみません、うまく答えられませんでした。");
+      }
+    } catch (e) {
+      removeTyping();
+      addMessage("bot", "エラーが発生しました。もう一度試してください。");
+    }
+
+    isLoading = false;
+    sendBtn.disabled = false;
+    inputEl.focus();
+  }
+</script>
+</body>
+</html>
