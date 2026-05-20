@@ -1,4 +1,5 @@
 import os
+import time
 from flask import Flask, render_template, request, jsonify
 from google import genai
 from google.genai import types
@@ -12,7 +13,7 @@ SYSTEM_PROMPT = """あなたは「藤本 憲（ふじもと けん）」の分�
 ・名前: 藤本 憲（ふじもと けん）
 ・ニックネーム: フジケン、フジモン、フジモッチ
 ・職業: ラジオパーソナリティ
-・誕生日: 1998年2月6日（27歳）
+・誕生日: 1998年2月6日
 ・身長: 177cm
 ・血液型: AB型
 ・MBTI: INFJ（提唱者型・最希少タイプ）
@@ -177,27 +178,33 @@ def chat():
 
     MODELS = [
         "models/gemini-2.5-flash",
-        "models/gemini-2.5-flash-lite-preview-06-17",
+        "models/gemini-2.0-flash-lite",
         "models/gemini-2.0-flash",
-        "models/gemini-1.5-flash",
+        "models/gemini-1.5-flash-8b",
     ]
     last_error = None
     for model_name in MODELS:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    temperature=0.8,
+        for attempt in range(3):  # 各モデルを最大3回試みる
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        temperature=0.8,
+                    )
                 )
-            )
-            print(f"使用モデル: {model_name}")
-            return jsonify({"response": response.text})
-        except Exception as e:
-            print(f"APIエラー ({model_name}): {e}")
-            last_error = e
-            continue
+                print(f"使用モデル: {model_name} (試行{attempt+1}回目)")
+                return jsonify({"response": response.text})
+            except Exception as e:
+                err_str = str(e)
+                print(f"APIエラー ({model_name} 試行{attempt+1}): {err_str[:100]}")
+                last_error = e
+                if "503" in err_str or "UNAVAILABLE" in err_str:
+                    time.sleep(2)  # 混雑時は2秒待ってリトライ
+                    continue
+                else:
+                    break  # 503以外のエラーは次のモデルへ
     return jsonify({"error": str(last_error)}), 500
 
 if __name__ == "__main__":
