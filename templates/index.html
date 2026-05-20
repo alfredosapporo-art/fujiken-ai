@@ -386,7 +386,7 @@
         // 直近20件のみ保持
         if (history.length > 20) history = history.slice(-20);
       } else {
-        addMessage("bot", "すみません、うまく答えられませんでした。");
+        addMessage("bot", "ただいま混み合っています。もう一度送ってみてください。");
       }
     } catch (e) {
       removeTyping();
