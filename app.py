@@ -235,10 +235,11 @@ def chat():
     # ① まずGroqで試みる（高速・安定）
     if groq_client:
         try:
-            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-for msg in recent_history:
-    role = "assistant" if msg["role"] == "model" else msg["role"]
-    messages.append({"role": role, "content": msg["content"]})
+           messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            recent_history = history[-4:] if len(history) > 4 else history
+            for msg in recent_history:
+                role = "assistant" if msg["role"] == "model" else msg["role"]
+                messages.append({"role": role, "content": msg["content"]})
             messages.append({"role": "user", "content": user_message})
 
             response = groq_client.chat.completions.create(
