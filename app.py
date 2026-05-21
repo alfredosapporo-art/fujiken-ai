@@ -282,3 +282,4 @@ if __name__ == "__main__":
     print(f"APIキー確認: {'設定済み' if API_KEY else '未設定 ← 要確認'}")
     app.run(debug=True, port=5000)
 
+
