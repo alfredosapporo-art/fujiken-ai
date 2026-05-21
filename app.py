@@ -235,7 +235,7 @@ def chat():
     # ① まずGroqで試みる（高速・安定）
     if groq_client:
         try:
-           messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
             recent_history = history[-4:] if len(history) > 4 else history
             for msg in recent_history:
                 role = "assistant" if msg["role"] == "model" else msg["role"]
