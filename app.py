@@ -236,19 +236,17 @@ def chat():
     if groq_client:
         try:
             messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            recent_history = history[-4:] if len(history) > 4 else history
-            for msg in recent_history:
-                role = "assistant" if msg["role"] == "model" else msg["role"]
-                messages.append({"role": role, "content": msg["content"]})
+            for msg in history:
+                messages.append({"role": msg["role"], "content": msg["content"]})
             messages.append({"role": "user", "content": user_message})
 
             response = groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 messages=messages,
                 temperature=0.8,
                 max_tokens=1024,
             )
-            print("使用モデル: Groq / llama-3.1-8b-instant")
+            print("使用モデル: Groq / llama-3.3-70b-versatile")
             return jsonify({"response": response.choices[0].message.content})
         except Exception as e:
             print(f"Groqエラー: {e}")
