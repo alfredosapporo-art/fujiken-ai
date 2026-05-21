@@ -1,6 +1,7 @@
 import os
 import time
 from flask import Flask, render_template, request, jsonify
+from groq import Groq
 from google import genai
 from google.genai import types
 
@@ -21,14 +22,11 @@ SYSTEM_PROMPT = """あなたは「藤本 憲（ふじもと けん）」の分�
 ・利き手: 左利き
 ・出身: 北海道札幌市（北海道→広島→栃木県足利市）
 ・出身大学: 広島大学
-・特技: モノマネ
+・特技: モノマネ (武田鉄矢、黒板吾郎)
 
 【担当番組】
 ・Let's Start Reve's（月曜 19:00〜19:30）
-・ゆうやけ!だもの!（木曜 17:00〜18:30）
-・YOUとMAYUのサウンドトラベラーズ
-・はしもと夫婦の産んだだけで100点満点
-・テトラスポーツの栄養ナビ
+・ゆうやけ!だもの!（木曜 17:00〜19:00）
 
 【趣味・好きなもの】
 ・洋楽（NMEで毎週最新情報をチェックするほど熱心）
@@ -141,7 +139,6 @@ A: 父親が車でエリック・クラプトンやTOTOといった洋楽をよ�
 Q: Oasisで好きな曲は？
 A: 「Whatever」が好きです。
 
-【街録ch】
 Q: お休みの日はどんな過ごし方をされているんですか？
 A: 午前中は寝ています。午後から始動して、家のことをしたり、知り合いとご飯に行ったり。夕方は普段聴けない音楽を聴いたり、友達と1日外に出て遊ぶ感じです。
 
@@ -216,8 +213,11 @@ A: 1年浪人しました。1回目で落ちて、もう1年頑張って入り�
 ・長くなりすぎず、自然な会話を心がける
 """
 
-API_KEY = os.environ.get("GEMINI_API_KEY", "")
-client = genai.Client(api_key=API_KEY)
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 @app.route("/")
 def index():
@@ -232,44 +232,53 @@ def chat():
     if not user_message:
         return jsonify({"error": "メッセージが空です"}), 400
 
-    # 会話履歴を構築
-    contents = []
-    for msg in history:
-        role = "user" if msg["role"] == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
-    contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
+    # ① まずGroqで試みる（高速・安定）
+    if groq_client:
+        try:
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            for msg in history:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+            messages.append({"role": "user", "content": user_message})
 
-    MODELS = [
-        "models/gemini-2.5-flash",
-        "models/gemini-2.0-flash-lite",
-        "models/gemini-2.0-flash",
-        "models/gemini-1.5-flash-8b",
-    ]
-    last_error = None
-    for model_name in MODELS:
-        for attempt in range(3):  # 各モデルを最大3回試みる
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_PROMPT,
-                        temperature=0.8,
+            response = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                temperature=0.8,
+                max_tokens=1024,
+            )
+            print("使用モデル: Groq / llama-3.3-70b-versatile")
+            return jsonify({"response": response.choices[0].message.content})
+        except Exception as e:
+            print(f"Groqエラー: {e}")
+
+    # ② GroqがだめならGeminiで試みる（フォールバック）
+    if gemini_client:
+        contents = []
+        for msg in history:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+        contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
+
+        for model_name in ["models/gemini-2.5-flash", "models/gemini-2.0-flash-lite"]:
+            for attempt in range(2):
+                try:
+                    response = gemini_client.models.generate_content(
+                        model=model_name,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=SYSTEM_PROMPT,
+                            temperature=0.8,
+                        )
                     )
-                )
-                print(f"使用モデル: {model_name} (試行{attempt+1}回目)")
-                return jsonify({"response": response.text})
-            except Exception as e:
-                err_str = str(e)
-                print(f"APIエラー ({model_name} 試行{attempt+1}): {err_str[:100]}")
-                last_error = e
-                if "503" in err_str or "UNAVAILABLE" in err_str:
-                    time.sleep(2)  # 混雑時は2秒待ってリトライ
-                    continue
-                else:
-                    break  # 503以外のエラーは次のモデルへ
-    return jsonify({"error": str(last_error)}), 500
+                    print(f"使用モデル: Gemini / {model_name}")
+                    return jsonify({"response": response.text})
+                except Exception as e:
+                    print(f"Geminiエラー ({model_name}): {e}")
+                    time.sleep(2)
+
+    return jsonify({"error": "応答できませんでした"}), 500
 
 if __name__ == "__main__":
     print(f"APIキー確認: {'設定済み' if API_KEY else '未設定 ← 要確認'}")
     app.run(debug=True, port=5000)
+
