@@ -1,5 +1,8 @@
 import os
 import time
+import urllib.request
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, jsonify
 from groq import Groq
 from google import genai
@@ -1106,9 +1109,118 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
+# ── 東京の今日のニュース ────────────────────────────
+JST = timezone(timedelta(hours=9))
+TOKYO_NEWS_RSS_URL = "https://news.google.com/rss/search?q=%E6%9D%B1%E4%BA%AC&hl=ja&gl=JP&ceid=JP:ja"
+
+# 日付ごとにニュースをキャッシュし、同じ日は何度アクセスしても再取得しない
+_news_cache = {"date": None, "items": [], "intro": ""}
+
+
+def _fetch_tokyo_news(limit=10):
+    req = urllib.request.Request(
+        TOKYO_NEWS_RSS_URL,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; FujikenAI/1.0)"},
+    )
+    with urllib.request.urlopen(req, timeout=8) as res:
+        raw = res.read()
+
+    root = ET.fromstring(raw)
+    items = []
+    for item in root.findall("./channel/item")[:limit]:
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        pub_date = (item.findtext("pubDate") or "").strip()
+        source_el = item.find("source")
+        source = source_el.text.strip() if source_el is not None and source_el.text else ""
+
+        # Googleニュースの見出しは「タイトル - 提供元」の形式で、source要素と重複することが多い
+        if source and title.endswith(f" - {source}"):
+            title = title[: -(len(source) + 3)].rstrip()
+        elif not source and " - " in title:
+            title, _, source = title.rpartition(" - ")
+
+        items.append({"title": title, "link": link, "source": source, "pub_date": pub_date})
+    return items
+
+
+def _generate_news_intro(items):
+    if not items:
+        return ""
+
+    headlines = "\n".join(f"・{it['title']}" for it in items[:8])
+    prompt = (
+        "以下は本日の東京の主要ニュース見出しです。藤本憲として、リスナーに向けて"
+        "今日一日の東京のニュースをざっくり紹介する一言コメントを150文字以内で書いてください。"
+        "見出しを機械的に列挙するのではなく、気になったものをいくつか挙げつつ自然な語り口で。\n\n"
+        f"{headlines}"
+    )
+
+    if groq_client:
+        try:
+            response = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.8,
+                max_tokens=300,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"ニュース一言コメント Groqエラー: {e}")
+
+    if gemini_client:
+        try:
+            response = gemini_client.models.generate_content(
+                model="models/gemini-2.5-flash",
+                contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0.8,
+                ),
+            )
+            return response.text.strip()
+        except Exception as e:
+            print(f"ニュース一言コメント Geminiエラー: {e}")
+
+    return ""
+
+
+def _get_daily_tokyo_news(force=False):
+    today = datetime.now(JST).strftime("%Y-%m-%d")
+
+    if not force and _news_cache["date"] == today and _news_cache["items"]:
+        return _news_cache["items"], _news_cache["intro"], None
+
+    try:
+        items = _fetch_tokyo_news()
+    except Exception as e:
+        print(f"ニュース取得エラー: {e}")
+        if _news_cache["items"]:
+            # 取得に失敗した場合は前回分があればそれを表示し続ける
+            return _news_cache["items"], _news_cache["intro"], None
+        return [], "", "ニュースを取得できませんでした。時間をおいて再度お試しください。"
+
+    intro = _generate_news_intro(items)
+    _news_cache["date"] = today
+    _news_cache["items"] = items
+    _news_cache["intro"] = intro
+    return items, intro, None
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/news")
+def news():
+    force = request.args.get("refresh") == "1"
+    items, intro, error = _get_daily_tokyo_news(force=force)
+    today_label = datetime.now(JST).strftime("%Y年%m月%d日")
+    return render_template("news.html", items=items, intro=intro, error=error, today_label=today_label)
 
 @app.route("/chat", methods=["POST"])
 def chat():
