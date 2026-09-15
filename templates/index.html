@@ -61,8 +61,27 @@
       margin-top: 2px;
     }
 
-    .status {
+    .header-right {
       margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .news-link {
+      color: #e2e8f0;
+      text-decoration: none;
+      font-size: 12px;
+      background: rgba(255,255,255,0.12);
+      padding: 8px 14px;
+      border-radius: 20px;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+
+    .news-link:hover { background: rgba(255,255,255,0.22); }
+
+    .status {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -275,9 +294,12 @@
       <h1>藤本 憲 AI</h1>
       <p>フジケン / ラジオパーソナリティ</p>
     </div>
-    <div class="status">
-      <div class="status-dot"></div>
-      オンライン
+    <div class="header-right">
+      <a class="news-link" href="/news">📰 東京ニュース</a>
+      <div class="status">
+        <div class="status-dot"></div>
+        オンライン
+      </div>
     </div>
   </div>
 
